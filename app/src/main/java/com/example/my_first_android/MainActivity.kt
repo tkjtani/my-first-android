@@ -95,6 +95,7 @@ fun ProfileRoute(
     val scope = rememberCoroutineScope()
     val currentVersion = remember { getCurrentVersion(context) }
     var updateState by remember { mutableStateOf(UpdateCheckUiState()) }
+    var download by remember { mutableStateOf(DownloadUiState()) }
 
     val notifLauncher = rememberLauncherForActivityResult(
         ActivityResultContracts.RequestPermission()
@@ -105,6 +106,7 @@ fun ProfileRoute(
     fun doCheck() {
         if (updateState.checking) return
         updateState = updateState.copy(checking = true, status = "Memeriksa...", release = null)
+        download = DownloadUiState()
         scope.launch {
             try {
                 val rel = fetchLatestRelease()
@@ -141,14 +143,57 @@ fun ProfileRoute(
         }
     }
 
+    fun doDownload() {
+        val rel = updateState.release ?: return
+        val url = rel.apkUrl ?: run {
+            openUrl(context, rel.htmlUrl)
+            return
+        }
+        if (download.phase == DownloadPhase.Downloading) return
+        download = DownloadUiState(phase = DownloadPhase.Downloading, progress = 0)
+        scope.launch {
+            try {
+                val file = downloadReleaseApk(context, url) { p ->
+                    download = download.copy(progress = p)
+                }
+                download = DownloadUiState(
+                    phase = DownloadPhase.ReadyToInstall,
+                    progress = 100,
+                    file = file
+                )
+            } catch (e: Exception) {
+                download = DownloadUiState(phase = DownloadPhase.Failed, error = e.message)
+            }
+        }
+    }
+
+    fun doInstall() {
+        val file = download.file ?: return
+        if (!canInstallUnknownApps(context)) {
+            openUnknownSourcesSettings(context)
+            download = download.copy(
+                error = "Aktifkan 'Install unknown apps' untuk app ini, lalu ketuk Install lagi."
+            )
+            return
+        }
+        try {
+            installApkFile(context, file)
+        } catch (e: Exception) {
+            download = download.copy(error = e.message)
+        }
+    }
+
     ProfileScreen(
         state = profile,
         updateState = updateState,
+        download = download,
         currentVersion = currentVersion,
         onFollowersClick = onFollowersClick,
         onFollowClick = onFollowClick,
         onPrivacyClick = onPrivacyClick,
         onCheckUpdate = ::doCheck,
+        onDownload = ::doDownload,
+        onInstall = ::doInstall,
         onOpenUrl = { url -> openUrl(context, url) }
     )
 }

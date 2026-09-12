@@ -31,6 +31,7 @@ import androidx.compose.material3.FilledTonalButton
 import androidx.compose.material3.HorizontalDivider
 import androidx.compose.material3.Icon
 import androidx.compose.material3.IconButton
+import androidx.compose.material3.LinearProgressIndicator
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedButton
 import androidx.compose.material3.Scaffold
@@ -347,11 +348,34 @@ fun PrivacySettingRow(
 }
 
 @Composable
+fun AboutCard(modifier: Modifier = Modifier) {
+    Card(modifier = modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(text = "Tentang (dummy v1.2)", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.size(4.dp))
+            Text(
+                text = "Akun contoh untuk uji coba update via GitHub Releases.",
+                style = MaterialTheme.typography.bodyMedium,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+            Spacer(modifier = Modifier.size(4.dp))
+            Text(
+                text = "Bergabung • 2026",
+                style = MaterialTheme.typography.bodySmall,
+                color = MaterialTheme.colorScheme.onSurfaceVariant
+            )
+        }
+    }
+}
+
+@Composable
 fun UpdateCard(
     state: UpdateCheckUiState,
+    download: DownloadUiState,
     currentVersion: String,
     onCheckUpdate: () -> Unit,
-    onDownload: (LatestRelease) -> Unit,
+    onDownload: () -> Unit,
+    onInstall: () -> Unit,
     onOpenRelease: (LatestRelease) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -384,19 +408,58 @@ fun UpdateCard(
                     Text(text = rel.body.take(300), style = MaterialTheme.typography.bodySmall)
                 }
                 Spacer(modifier = Modifier.size(8.dp))
-                Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
-                    Button(
-                        onClick = { onDownload(rel) },
-                        modifier = Modifier.heightIn(min = 48.dp)
-                    ) {
-                        Text("Download Update")
+                when (download.phase) {
+                    DownloadPhase.Downloading -> {
+                        Text(
+                            text = "Mengunduh... ${download.progress}%",
+                            style = MaterialTheme.typography.bodySmall
+                        )
+                        Spacer(modifier = Modifier.size(4.dp))
+                        LinearProgressIndicator(
+                            progress = { download.progress / 100f },
+                            modifier = Modifier.fillMaxWidth()
+                        )
                     }
-                    OutlinedButton(
-                        onClick = { onOpenRelease(rel) },
-                        modifier = Modifier.heightIn(min = 48.dp)
-                    ) {
-                        Text("Lihat Release")
+                    DownloadPhase.ReadyToInstall -> {
+                        Button(
+                            onClick = onInstall,
+                            modifier = Modifier.heightIn(min = 48.dp)
+                        ) {
+                            Text("Install Sekarang")
+                        }
                     }
+                    else -> {
+                        Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
+                            Button(
+                                onClick = onDownload,
+                                modifier = Modifier.heightIn(min = 48.dp)
+                            ) {
+                                Text("Download Update")
+                            }
+                            OutlinedButton(
+                                onClick = { onOpenRelease(rel) },
+                                modifier = Modifier.heightIn(min = 48.dp)
+                            ) {
+                                Text("Lihat Release")
+                            }
+                        }
+                    }
+                }
+                if (download.phase == DownloadPhase.Failed) {
+                    Spacer(modifier = Modifier.size(4.dp))
+                    Text(
+                        text = "Gagal: ${download.error ?: "tidak diketahui"} — coba lagi.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.error
+                    )
+                }
+                if (download.phase == DownloadPhase.ReadyToInstall) {
+                    Spacer(modifier = Modifier.size(4.dp))
+                    Text(
+                        text = "APK sudah diunduh. Ketuk Install, lalu setujui verifikasi Play Protect.",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
                 }
             }
         }
@@ -410,11 +473,14 @@ fun UpdateCard(
 fun ProfileScreen(
     state: ProfileUiState,
     updateState: UpdateCheckUiState,
+    download: DownloadUiState,
     currentVersion: String,
     onFollowersClick: () -> Unit,
     onFollowClick: () -> Unit,
     onPrivacyClick: () -> Unit,
     onCheckUpdate: () -> Unit,
+    onDownload: () -> Unit,
+    onInstall: () -> Unit,
     onOpenUrl: (String) -> Unit,
     modifier: Modifier = Modifier
 ) {
@@ -450,11 +516,15 @@ fun ProfileScreen(
             Spacer(modifier = Modifier.size(24.dp))
             HorizontalDivider()
             Spacer(modifier = Modifier.size(24.dp))
+            AboutCard()
+            Spacer(modifier = Modifier.size(16.dp))
             UpdateCard(
                 state = updateState,
+                download = download,
                 currentVersion = currentVersion,
                 onCheckUpdate = onCheckUpdate,
-                onDownload = { rel -> onOpenUrl(rel.apkUrl ?: rel.htmlUrl) },
+                onDownload = onDownload,
+                onInstall = onInstall,
                 onOpenRelease = { rel -> onOpenUrl(rel.htmlUrl) }
             )
         }
@@ -570,11 +640,14 @@ fun ProfilePreview() {
         ProfileScreen(
             state = SampleData.profile,
             updateState = UpdateCheckUiState(),
-            currentVersion = "1.1",
+            download = DownloadUiState(),
+            currentVersion = "1.2",
             onFollowersClick = {},
             onFollowClick = {},
             onPrivacyClick = {},
             onCheckUpdate = {},
+            onDownload = {},
+            onInstall = {},
             onOpenUrl = {}
         )
     }
@@ -587,20 +660,23 @@ fun ProfileFollowingDarkPreview() {
         ProfileScreen(
             state = SampleData.profile.copy(isFollowing = true),
             updateState = UpdateCheckUiState(
-                status = "Update tersedia: v1.1",
+                status = "Update tersedia: v1.2",
                 release = LatestRelease(
-                    tag = "v1.1",
-                    name = "Versi 1.1",
-                    body = "Redesain profile + perbaikan.",
-                    htmlUrl = "https://github.com/tkjtani/my-first-android/releases/tag/v1.1",
+                    tag = "v1.2",
+                    name = "Versi 1.2",
+                    body = "Download dalam app + kartu Tentang.",
+                    htmlUrl = "https://github.com/tkjtani/my-first-android/releases/tag/v1.2",
                     apkUrl = null
                 )
             ),
-            currentVersion = "1.0",
+            download = DownloadUiState(phase = DownloadPhase.ReadyToInstall, progress = 100),
+            currentVersion = "1.1",
             onFollowersClick = {},
             onFollowClick = {},
             onPrivacyClick = {},
             onCheckUpdate = {},
+            onDownload = {},
+            onInstall = {},
             onOpenUrl = {}
         )
     }
