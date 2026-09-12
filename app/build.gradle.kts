@@ -19,10 +19,35 @@ android {
         testInstrumentationRunner = "androidx.test.runner.AndroidJUnitRunner"
     }
 
+    signingConfigs {
+        create("release") {
+            val ksPath = (project.findProperty("RELEASE_STORE_FILE") as String?)
+                ?: System.getenv("RELEASE_STORE_FILE")
+            val ksPass = (project.findProperty("RELEASE_STORE_PASSWORD") as String?)
+                ?: System.getenv("RELEASE_STORE_PASSWORD")
+            val ksAlias = (project.findProperty("RELEASE_KEY_ALIAS") as String?)
+                ?: System.getenv("RELEASE_KEY_ALIAS")
+            val ksKeyPass = (project.findProperty("RELEASE_KEY_PASSWORD") as String?)
+                ?: System.getenv("RELEASE_KEY_PASSWORD")
+            if (!ksPath.isNullOrBlank()) {
+                storeFile = file(ksPath)
+                storePassword = ksPass
+                keyAlias = ksAlias
+                keyPassword = ksKeyPass
+            }
+        }
+    }
     buildTypes {
         release {
             optimization {
                 enable = false
+            }
+            // Pakai keystore release jika tersedia di local.properties / env,
+            // kalau tidak ada fallback ke debug agar assembleRelease tetap jalan saat dev.
+            val ksPath = (project.findProperty("RELEASE_STORE_FILE") as String?)
+                ?: System.getenv("RELEASE_STORE_FILE")
+            if (!ksPath.isNullOrBlank()) {
+                signingConfig = signingConfigs.getByName("release")
             }
         }
     }
@@ -45,6 +70,7 @@ dependencies {
     implementation(libs.androidx.core.ktx)
     implementation(libs.androidx.lifecycle.runtime.ktx)
     implementation("androidx.navigation:navigation-compose:2.9.3")
+    implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0")
     testImplementation(libs.junit)
     androidTestImplementation(platform(libs.androidx.compose.bom))
     androidTestImplementation(libs.androidx.compose.ui.test.junit4)
