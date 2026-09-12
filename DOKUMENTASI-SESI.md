@@ -18,14 +18,15 @@ build: Kotlin DSL (build.gradle.kts)
 minSdk: 26
 targetSdk: 37
 compileSdk: 37
-versionCode: 1
-versionName: "1.0"
+versionCode: 4
+versionName: "1.3"
 agp: "9.3.2"
 kotlin: "2.2.10"
 composeBom: "2026.02.01"
 key_deps:
   - androidx.navigation:navigation-compose:2.9.3
   - org.jetbrains.kotlinx:kotlinx-coroutines-android:1.9.0
+  - androidx.compose.material:material-icons-core (ikon TopAppBar)
 host: Fedora 44 Workstation x86_64, Wayland, RAM 7.6GB
 sdk: /home/ownhp/Android/Sdk (platforms/android-37.0, build-tools/36.0.0, platform-tools/adb 37.0.1)
 studio: ~/Applications/android-studio/ (Quail 3 Patch 1)
@@ -34,11 +35,14 @@ device: HP fisik via USB debugging (tanpa emulator)
 gradle_memory: org.gradle.jvmargs=-Xmx2048m
 keystore: /home/ownhp/my-release-key.jks (PKCS12, alias=mykey, 10000 hari, chmod 600, DI LUAR repo)
 secrets: local.properties (gitignored, chmod 600) berisi RELEASE_STORE_FILE/PASSWORD/ALIAS/KEY_PASSWORD
-release_tag: v1.0 ("versi 1", sudah publish, asset app-release.apk ~7.8-8MB, signed CN=MyFirstAndroid)
+release_tag: v1.3 (latest; riwayat: v1.0 → v1.1 redesain → v1.2 download-dalam-app → v1.3 uji nyata)
 commits:
   - 8b9677b "Initial commit: Compose + nav 2 screen"
   - 9431e6b "Tambah cek update via GitHub Releases + notifikasi in-app"
   - b41233b "Fix signing: baca keystore dari local.properties, samakan password PKCS12"
+  - c8b5b0d "Redesain profile/followers/privacy (DESIGN.md) + v1.1 untuk uji update"
+  - 6d131ec "Download APK dalam app + kartu Tentang dummy (v1.2)"
+  - 71173c7 "Penanda dummy v1.3 (kartu Yang baru + Tentang v1.3)"
 ```
 
 ## 1. Ringkasan Sesi (kronologis)
@@ -90,6 +94,25 @@ commits:
 17. **Setiap rilis baru = upload ulang APK** — ya; alur bump versi → build →
     upload dijelaskan; ditawari GitHub Actions otomatis (belum dikerjakan).
 18. **Dokumen ini** — dibuat atas permintaan user.
+19. **Redesain UI v1.1 (DESIGN.md)** — baca `DESIGN.md` dulu (wajib AGENTS.md);
+    rute `profile` → `profile/followers` + `profile/privacy`; komponen reusable
+    (`ProfileHeader`, `FollowerRow`, `PrivacySettingRow`, `UpdateCard`);
+    state `rememberSaveable` + Saver; tambah `material-icons-core`;
+    `versionCode 2`/`"1.1"`; debug+release ✓; push `c8b5b0d`.
+20. **Rilis via CLI** — tag bisa `git tag + push` (kredensial tersimpan cukup);
+    Release + asset butuh `gh` (`sudo dnf install gh`, `gh auth login` sekali).
+    Tag `v1.1` di-push via git, Release dibuat via web; setelah `gh` login,
+    Release `v1.2`/`v1.3` penuh via `gh release create`.
+21. **Download dalam app (v1.2)** — `REQUEST_INSTALL_PACKAGES` + FileProvider +
+    DownloadManager + progress + Install Sekarang; kartu Tentang dummy;
+    `versionCode 3`/`"1.2"`; commit `6d131ec`; Release v1.2 via `gh`.
+    Temuan uji: HP yang masih v1.0/v1.1 tetap buka browser (wajar — kode baru
+    baru ada di v1.2; butuh 1x update browser sebagai bootstrap).
+22. **Penanda dummy v1.3** — kartu "Yang baru di v1.3" + judul Tentang v1.3;
+    `versionCode 4`; commit `71173c7`; Release v1.3 via `gh`; dipakai menguji
+    alur download-dalam-app dari v1.2. Hasil: jalan, tapi verifikasi Play
+    Protect + izin unknown-apps tetap wajib (proteksi OS, tak bisa bypass).
+23. **Dokumentasi fitur download (§11)** — dibuat + digabung ke dokumen ini.
 
 ## 2. Struktur Project Akhir
 
@@ -98,11 +121,13 @@ myfirstandroid/
 ├── android-studio-opencode-mulai.md   # panduan awal (lokal)
 ├── DOKUMENTASI-SESI.md                # file ini
 ├── app/
-│   ├── build.gradle.kts               # signing release + deps nav/coroutines
+│   ├── build.gradle.kts               # signing release + deps nav/coroutines/icons
 │   └── src/main/
-│       ├── AndroidManifest.xml        # INTERNET + POST_NOTIFICATIONS
-│       ├── java/.../MainActivity.kt   # AppNav + HomeScreen + DetailScreen + Cek Update
-│       └── java/.../UpdateChecker.kt  # fetch releases/latest, notifikasi (baru)
+│       ├── AndroidManifest.xml        # INTERNET + POST_NOTIFICATIONS + REQUEST_INSTALL_PACKAGES + FileProvider
+│       ├── res/xml/file_paths.xml     # jalur FileProvider (Download privat app)
+│       ├── java/.../MainActivity.kt   # AppNav (profile/…) + ProfileRoute (cek+download+install)
+│       ├── java/.../ProfileScreens.kt # model, komponen reusable, 3 layar, preview
+│       └── java/.../UpdateChecker.kt  # fetch releases/latest, notifikasi, downloader, installer
 ├── gradle/libs.versions.toml
 ├── gradle.properties                  # -Xmx2048m, configuration-cache
 ├── local.properties                   # GITIGNORED: sdk.dir + RELEASE_* secrets
@@ -148,20 +173,42 @@ memakai signing itu hanya jika `RELEASE_STORE_FILE` ada (fallback unsigned).
 
 ### 3.4 Hybrid update (`UpdateChecker.kt` + `MainActivity.kt` + Manifest)
 
+> Alur lama (v1.0–v1.1, layar Home/detail — sudah diganti redesain §3.5).
+
 - `GITHUB_OWNER = "tkjtani"`, `GITHUB_REPO = "my-first-android"`.
 - `fetchLatestRelease()` (coroutine IO, `HttpURLConnection`, `org.json`):
   GET `api.github.com/.../releases/latest` → `tag/name/body/html_url` +
   cari asset `.apk` → `apkUrl`.
 - `normalizeTag()` hapus prefix `v`; `isUpdateAvailable()` = beda string.
-- `HomeScreen`: seksi versi (`getCurrentVersion()` via PackageManager),
-  tombol **Cek Update**, status, kartu update (**Download Update** /
-  **Lihat Release**), `verticalScroll` anti-overflow.
 - `showUpdateNotification()`: channel `update_channel`, `PendingIntent`
   ke `apkUrl ?: htmlUrl`; minta `POST_NOTIFICATIONS` (Android 13+) via
   `rememberLauncherForActivityResult`.
-- Perilaku: `1.0` vs tag `v1.0` → "Sudah versi terbaru"; tag baru (misal
-  `v1.1`) → status + kartu + notifikasi. Tanpa Release → error 404 yang
-  ditangani ("buat Release dulu").
+- Perilaku: versi == tag → "Sudah versi terbaru"; tag baru → status + kartu +
+  notifikasi. Tanpa Release → error 404 yang ditangani ("buat Release dulu").
+
+### 3.5 Redesain v1.1 (DESIGN.md: profil Bing iOS → Material 3 Android)
+
+- Rute Navigation Compose: `profile` (start) → `profile/followers`,
+  `profile/privacy`; kembali via `popBackStack()`. Demo Toast/layar detail lama dihapus.
+- `ProfileScreens.kt`: model sesuai DESIGN.md + komponen reusable dengan state
+  hoisting (`ProfileHeader`, `ProfileStat`, `FollowerRow`, `PrivacySettingRow`,
+  `UpdateCard`); layar `ProfileScreen`/`FollowersScreen`/`PrivacyScreen`.
+- State di `AppNav` via `rememberSaveable` + Saver kustom (tahan rotasi tanpa
+  ViewModel/dep baru); kartu Cek Update dipindah ke Profile (`ProfileRoute`).
+- Aturan DESIGN.md: TopAppBar + divider (tanpa nested card), spacing grid 4dp,
+  tipografi semantik, `navigationBarsPadding`, touch target min 48dp,
+  content description ikon aksi, LazyColumn followers, Switch privacy,
+  dark theme (ikut tema app), 4 preview (termasuk dark + state update).
+- Avatar = inisial huruf (placeholder milik project; tanpa URL Figma sementara).
+- Dep baru: `androidx.compose.material:material-icons-core` (ikon resmi Material
+  untuk back + settings; sesuai AGENTS.md).
+
+### 3.6 Download dalam app v1.2 + dummy v1.3 (detail penuh di §11)
+
+- v1.2: `UpdateCard` dapat state download (Idle → Mengunduh % → Install Sekarang
+  → Gagal); `AboutCard` dummy; `versionCode 3`.
+- v1.3: `DummyV13Card` ("Yang baru di v1.3") + judul Tentang v1.3;
+  `versionCode 4`. Dipakai membuktikan alur v1.2→v1.3 tanpa browser.
 
 ## 4. Build & Verifikasi
 
@@ -203,14 +250,20 @@ git status -sb; git log --oneline -5; git pull --rebase
 
 ```bash
 # 1. Naikkan versi di app/build.gradle.kts: versionCode + versionName
-# 2. Build:
+# 2. Build + verifikasi signature:
 ./gradlew assembleRelease
-# 3. Commit + push; 4. GitHub web: Releases → Create → tag vX.Y → upload app-release.apk → Publish
-# Alternatif CLI: gh release create v1.1 app/.../app-release.apk --title "v1.1" --notes "..."
+# 3. Commit + push + tag (kredensial tersimpan cukup):
+git add -p && git commit -m "..." && git push
+git tag vX.Y && git push origin vX.Y
+# 4. Release + upload (butuh gh login sekali: sudo dnf install gh && gh auth login):
+gh release create vX.Y app/build/outputs/apk/release/app-release.apk \
+  --title "vX.Y" --notes "..."
+# Alternatif langkah 4 via web: Releases → Create → pilih tag → upload APK → Publish
 ```
 
 ### 6.2 Download & install (user akhir)
 
+**Alur browser (semua versi bisa):**
 - Link: `github.com/tkjtani/my-first-android/releases/latest` → Assets →
   `app-release.apk` → ketuk → izinkan `Install unknown apps` → Install.
   Play Protect "Unknown app" → `More details` → `Install anyway` (wajar).
@@ -218,6 +271,13 @@ git status -sb; git log --oneline -5; git pull --rebase
 - Update = timpa install; data aman selama applicationId + keystore sama.
 - Gagal umum: `Parse error` (minSdk 26 = Android 8+, file korup, konflik
   signature debug vs release), `Blocked` (izin per-app browser), storage.
+
+**Alur dalam app (butuh v1.2+ terinstall):**
+Profile → Cek Update → **Download Update** (progress % di app, tanpa browser) →
+**Install Sekarang** → (sekali saja: aktifkan unknown-apps untuk app ini) →
+setujui verifikasi Play Protect → selesai.
+Catatan bootstrap: HP yang masih v1.0/v1.1 belum punya kode ini → wajib 1x
+update via browser ke v1.2 dulu.
 
 ### 6.3 Pilihan distribusi (keputusan sesi)
 
@@ -233,17 +293,18 @@ Limit Firebase (docs resmi, dicek 2026): 500 tester/project, 200/grup,
 
 ## 7. Status Akhir & TODO
 
-**Selesai:** Toast ✓, nav 2 screen ✓, repo public + Release `v1.0` + APK signed ✓,
-updater in-app ✓, kredensial tersimpan ✓, dokumen ini ✓.
+**Selesai:** Toast ✓ (lalu diganti redesain), nav awal ✓, repo public +
+Release `v1.0` ✓, updater + notifikasi ✓, kredensial tersimpan ✓, dokumen ini ✓,
+redesain profile v1.1 ✓, Release CLI (tag git + `gh`) v1.1–v1.3 ✓,
+download-dalam-app v1.2 ✓, uji nyata v1.2→v1.3 ✓ (tetap wajib verifikasi
+Play Protect + izin unknown-apps — proteksi OS).
 
 **TODO yang ditawarkan (belum dikerjakan):**
 - [x] Redesain profile/followers/privacy (DESIGN.md) v1.1 — commit `c8b5b0d`,
-  `versionCode 2`/`versionName "1.1"`, release APK signed 7.9MB. Lanjut: buat
-  Release `v1.1` di web + upload `app-release.apk`, lalu uji Cek Update dari v1.0.
-- [ ] Test `Cek Update` di HP (v1.0 → terbaru; lalu rilis v1.1 untuk test update).
+  `versionCode 2`/`versionName "1.1"`, release APK signed 7.9MB. Release v1.1 jadi.
+- [x] Test Cek Update berBrowser (v1.0→v1.1) — terganti uji lebih baik v1.2→v1.3.
+- [x] Tombol update download+install langsung — jadi di v1.2 (`6d131ec`).
 - [ ] Workflow GitHub Actions: push tag `v*` → build signed → upload ke Release otomatis.
-- [ ] Tombol update: ganti buka-browser jadi download+install langsung
-      (`DownloadManager` + `FileProvider` + `REQUEST_INSTALL_PACKAGES`).
 - [ ] Background check berkala (`WorkManager`) + notifikasi proaktif.
 - [ ] Jalur Play Store (Internal/Closed Testing) untuk 1500 siswa.
 - [ ] Backup `~/my-release-key.jks` + password ke brankas (wajib sebelum laptop ganti).
@@ -307,6 +368,55 @@ ls app/build/outputs/apk/release/   # wajib app-release.apk (signed), bukan unsi
 # → CN=MyFirstAndroid ... (sama dengan PC lama)
 ```
 6. Lanjut kerja seperti biasa (§9); rilis baru tetap wajib tag + upload APK (§6.1).
+
+## 11. Fitur download dalam app — komponen wajib & cara kerja
+
+> Sejak v1.2. Alur: Cek Update → Download Update (di app) → Install Sekarang.
+> Terbukti jalan pada uji v1.2→v1.3. Verifikasi Play Protect + izin unknown-apps
+> tetap wajib (proteksi OS, tak bisa bypass — lihat §11.4).
+
+### 11.1 Komponen wajib (checklist)
+
+| # | Komponen | Lokasi | Tanpa ini |
+|---|---|---|---|
+| 1 | `INTERNET` | Manifest | API + unduhan gagal total |
+| 2 | `REQUEST_INSTALL_PACKAGES` | Manifest | installer sistem menolak di Android 8+ |
+| 3 | `FileProvider` + `res/xml/file_paths.xml` (`external-files-path …/Download/`) | Manifest + res | `FileUriExposedException` / installer tak bisa baca file |
+| 4 | `DownloadManager` + polling progres | `UpdateChecker.kt: downloadReleaseApk()` | tak ada unduhan latar + progres % |
+| 5 | Cek `canRequestPackageInstalls()` + fallback Settings unknown-sources | `UpdateChecker.kt`, `MainActivity.kt: doInstall()` | user mentok tanpa arahan saat izin belum aktif |
+| 6 | Intent `ACTION_VIEW` type `vnd.android.package-archive` + `FLAG_GRANT_READ_URI_PERMISSION` + `FLAG_ACTIVITY_NEW_TASK` | `UpdateChecker.kt: installApkFile()` | install tidak terbuka / akses file ditolak |
+| 7 | Asset `.apk` di GitHub Release + `apkUrl` ter-parse | Release + `fetchLatestRelease()` | fallback buka browser (atau tombol mati) |
+| 8 | Keystore SAMA + `versionCode` naik tiap rilis | keystore + `build.gradle.kts` | install diblokir (signature mismatch / downgrade) |
+| 9 | `POST_NOTIFICATIONS` (Android 13+, runtime) | Manifest + launcher izin | notifikasi "Update tersedia" tidak muncul |
+
+### 11.2 Alur state (UI di `UpdateCard`, logika di `ProfileRoute`)
+
+```
+Cek Update → status/kartu → [Download Update]
+  → Downloading (progress %, tombol dikunci)
+  → ReadyToInstall → [Install Sekarang] → installer OS → verifikasi → selesai
+  → Failed → pesan error + [Download Update] (coba lagi)
+[Lihat Release] selalu ada sebagai jalan keluar via browser.
+Cek ulang me-reset state download ke Idle.
+```
+
+### 11.3 Aturan OS yang tak bisa dinego (hasil uji)
+
+1. Izin "Install unknown apps" per-app (Android 8+) — sekali saja per app;
+   jika belum aktif, app mengarahkan ke Settings lalu user ketuk Install lagi.
+2. Verifikasi Play Protect tiap sideload ("Verifying…" / "Unknown app →
+   Install anyway"). Berasal dari OS, bukan dari kode kita.
+3. File APK di folder privat app (`getExternalFilesDir(Download)`) — tanpa
+   izin storage tambahan; dibagikan ke installer hanya via content URI FileProvider.
+4. Bootstrap: fitur ini hanya ada di app ≥ v1.2 — HP v1.0/v1.1 wajib 1x update
+   via browser dulu.
+
+### 11.4 Riwayat uji
+
+- v1.2 (`6d131ec`, `versionCode 3`): fitur + kartu Tentang dummy.
+- v1.3 (`71173c7`, `versionCode 4`): kartu "Yang baru di v1.3" sebagai penanda.
+- Uji v1.2→v1.3 dari HP: TERKONFIRMASI JALAN (progress dalam app, install,
+  penanda v1.3 muncul), dengan verifikasi + izin OS seperti §11.3.
 
 ---
 *Dibuat otomatis dari sesi chat tanggal 2026-09-12. Sesuaikan versi/tag pada rilis berikutnya.*
