@@ -237,6 +237,9 @@ Limit Firebase (docs resmi, dicek 2026): 500 tester/project, 200/grup,
 updater in-app ✓, kredensial tersimpan ✓, dokumen ini ✓.
 
 **TODO yang ditawarkan (belum dikerjakan):**
+- [x] Redesain profile/followers/privacy (DESIGN.md) v1.1 — commit `c8b5b0d`,
+  `versionCode 2`/`versionName "1.1"`, release APK signed 7.9MB. Lanjut: buat
+  Release `v1.1` di web + upload `app-release.apk`, lalu uji Cek Update dari v1.0.
 - [ ] Test `Cek Update` di HP (v1.0 → terbaru; lalu rilis v1.1 untuk test update).
 - [ ] Workflow GitHub Actions: push tag `v*` → build signed → upload ke Release otomatis.
 - [ ] Tombol update: ganti buka-browser jadi download+install langsung
