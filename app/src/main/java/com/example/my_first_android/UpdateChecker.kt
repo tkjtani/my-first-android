@@ -26,6 +26,13 @@ data class LatestRelease(
     val apkUrl: String?
 )
 
+/** State UI untuk kartu cek update. Domain (network) tetap di fungsi fetch. */
+data class UpdateCheckUiState(
+    val status: String = "Belum dicek.",
+    val checking: Boolean = false,
+    val release: LatestRelease? = null
+)
+
 suspend fun fetchLatestRelease(): LatestRelease = withContext(Dispatchers.IO) {
     val url = URL("https://api.github.com/repos/$GITHUB_OWNER/$GITHUB_REPO/releases/latest")
     val conn = (url.openConnection() as HttpURLConnection).apply {
