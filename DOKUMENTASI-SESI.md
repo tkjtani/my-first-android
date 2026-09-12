@@ -267,5 +267,43 @@ git add -p && git commit -m "..." && git push
 curl -sI https://github.com/tkjtani/my-first-android/releases/download/v1.0/app-release.apk | head -3
 ```
 
+## 10. Setup PC Baru (development di komputer lain)
+
+> Prinsip: semua ikut clone **kecuali** `local.properties`, `*.jks`, `build/`,
+> `.gradle/` (sengaja di-ignore). Kunci update = **keystore yang sama**;
+> keystore beda → user tidak bisa install timpa.
+
+1. Install: Android Studio + SDK (platform 37, build-tools 36); biarkan Studio
+   pakai JBR bawaannya (jangan set `JAVA_HOME` ke JDK sistem).
+   Cek: `~/Android/Sdk/platform-tools/adb devices`.
+2. Clone + buka di Studio (tunggu Gradle sync, wrapper terunduh otomatis):
+```bash
+git clone https://github.com/tkjtani/my-first-android.git
+cd my-first-android
+```
+3. Identitas + auth git (sekali):
+```bash
+git config --global user.name "Nama Kamu"
+git config --global user.email "email@contoh.com"
+git config --global credential.helper store   # atau libsecret/SSH (lihat §5)
+```
+4. Pindahkan keystore via media aman (USB/password manager, **bukan chat/email**):
+   - Copy `~/my-release-key.jks` dari PC lama ke path yang sama di PC baru,
+     `chmod 600`.
+   - Salin 4 baris `RELEASE_STORE_FILE / RELEASE_STORE_PASSWORD /
+     RELEASE_KEY_ALIAS / RELEASE_KEY_PASSWORD` dari `local.properties` lama
+     ke `local.properties` baru (biarkan baris `sdk.dir` versi PC baru yang
+     dibuat otomatis Studio), `chmod 600`.
+5. Verifikasi di PC baru:
+```bash
+./gradlew assembleDebug
+./gradlew assembleRelease
+ls app/build/outputs/apk/release/   # wajib app-release.apk (signed), bukan unsigned
+~/Android/Sdk/build-tools/36.0.0/apksigner verify --print-certs \
+  app/build/outputs/apk/release/app-release.apk | head -3
+# → CN=MyFirstAndroid ... (sama dengan PC lama)
+```
+6. Lanjut kerja seperti biasa (§9); rilis baru tetap wajib tag + upload APK (§6.1).
+
 ---
 *Dibuat otomatis dari sesi chat tanggal 2026-09-12. Sesuaikan versi/tag pada rilis berikutnya.*
