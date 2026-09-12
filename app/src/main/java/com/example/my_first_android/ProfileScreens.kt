@@ -351,7 +351,7 @@ fun PrivacySettingRow(
 fun AboutCard(modifier: Modifier = Modifier) {
     Card(modifier = modifier.fillMaxWidth()) {
         Column(modifier = Modifier.padding(16.dp)) {
-            Text(text = "Tentang (dummy v1.2)", style = MaterialTheme.typography.titleMedium)
+            Text(text = "Tentang (dummy v1.3)", style = MaterialTheme.typography.titleMedium)
             Spacer(modifier = Modifier.size(4.dp))
             Text(
                 text = "Akun contoh untuk uji coba update via GitHub Releases.",
@@ -364,6 +364,45 @@ fun AboutCard(modifier: Modifier = Modifier) {
                 style = MaterialTheme.typography.bodySmall,
                 color = MaterialTheme.colorScheme.onSurfaceVariant
             )
+        }
+    }
+}
+
+@Composable
+fun DummyV13Card(modifier: Modifier = Modifier) {
+    Card(modifier = modifier.fillMaxWidth()) {
+        Column(modifier = Modifier.padding(16.dp)) {
+            Text(text = "Yang baru di v1.3 (dummy)", style = MaterialTheme.typography.titleMedium)
+            Spacer(modifier = Modifier.size(8.dp))
+            Row(
+                modifier = Modifier.fillMaxWidth(),
+                horizontalArrangement = Arrangement.SpaceEvenly
+            ) {
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(text = "42", style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        text = "Kunjungan",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(text = "7", style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        text = "Lencana",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+                Column(horizontalAlignment = Alignment.CenterHorizontally) {
+                    Text(text = "99+", style = MaterialTheme.typography.titleLarge)
+                    Text(
+                        text = "Suka",
+                        style = MaterialTheme.typography.bodySmall,
+                        color = MaterialTheme.colorScheme.onSurfaceVariant
+                    )
+                }
+            }
         }
     }
 }
@@ -517,6 +556,8 @@ fun ProfileScreen(
             HorizontalDivider()
             Spacer(modifier = Modifier.size(24.dp))
             AboutCard()
+            Spacer(modifier = Modifier.size(16.dp))
+            DummyV13Card()
             Spacer(modifier = Modifier.size(16.dp))
             UpdateCard(
                 state = updateState,
