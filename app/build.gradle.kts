@@ -1,7 +1,19 @@
+import java.io.FileInputStream
+import java.util.Properties
+
 plugins {
     alias(libs.plugins.android.application)
     alias(libs.plugins.kotlin.compose)
 }
+
+val localProps = Properties().apply {
+    val f = rootProject.file("local.properties")
+    if (f.exists()) FileInputStream(f).use { fis -> load(fis) }
+}
+fun releaseProp(name: String): String? =
+    (project.findProperty(name) as String?)
+        ?: localProps.getProperty(name)
+        ?: System.getenv(name)
 
 android {
     namespace = "com.example.my_first_android"
@@ -21,14 +33,10 @@ android {
 
     signingConfigs {
         create("release") {
-            val ksPath = (project.findProperty("RELEASE_STORE_FILE") as String?)
-                ?: System.getenv("RELEASE_STORE_FILE")
-            val ksPass = (project.findProperty("RELEASE_STORE_PASSWORD") as String?)
-                ?: System.getenv("RELEASE_STORE_PASSWORD")
-            val ksAlias = (project.findProperty("RELEASE_KEY_ALIAS") as String?)
-                ?: System.getenv("RELEASE_KEY_ALIAS")
-            val ksKeyPass = (project.findProperty("RELEASE_KEY_PASSWORD") as String?)
-                ?: System.getenv("RELEASE_KEY_PASSWORD")
+            val ksPath = releaseProp("RELEASE_STORE_FILE")
+            val ksPass = releaseProp("RELEASE_STORE_PASSWORD")
+            val ksAlias = releaseProp("RELEASE_KEY_ALIAS")
+            val ksKeyPass = releaseProp("RELEASE_KEY_PASSWORD")
             if (!ksPath.isNullOrBlank()) {
                 storeFile = file(ksPath)
                 storePassword = ksPass
@@ -44,8 +52,7 @@ android {
             }
             // Pakai keystore release jika tersedia di local.properties / env,
             // kalau tidak ada fallback ke debug agar assembleRelease tetap jalan saat dev.
-            val ksPath = (project.findProperty("RELEASE_STORE_FILE") as String?)
-                ?: System.getenv("RELEASE_STORE_FILE")
+            val ksPath = releaseProp("RELEASE_STORE_FILE")
             if (!ksPath.isNullOrBlank()) {
                 signingConfig = signingConfigs.getByName("release")
             }
